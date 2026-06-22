@@ -1,0 +1,469 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Alarma">
+<meta name="theme-color" content="#0a0a0a">
+<title>Alarma Anti-Snooze</title>
+<link rel="manifest" href="manifest.json">
+<link rel="apple-touch-icon" href="icon-192.png">
+<style>
+  :root {
+    --bg: #0a0a0a;
+    --bg2: #141414;
+    --bg3: #1e1e1e;
+    --border: rgba(255,255,255,0.08);
+    --border2: rgba(255,255,255,0.15);
+    --text: #f0f0f0;
+    --text2: #888;
+    --text3: #555;
+    --accent: #6c5ce7;
+    --accent-dim: rgba(108,92,231,0.15);
+    --accent-dim2: rgba(108,92,231,0.25);
+    --green: #00b894;
+    --green-dim: rgba(0,184,148,0.15);
+    --red: #e17055;
+    --red-dim: rgba(225,112,85,0.15);
+    --safe-top: env(safe-area-inset-top, 0px);
+    --safe-bottom: env(safe-area-inset-bottom, 0px);
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
+  html, body { height: 100%; background: var(--bg); color: var(--text); font-family: -apple-system, 'SF Pro Display', sans-serif; overflow: hidden; }
+
+  /* SCREENS */
+  .screen { position: fixed; inset: 0; display: flex; flex-direction: column; opacity: 0; pointer-events: none; transition: opacity 0.3s; padding-top: calc(var(--safe-top) + 16px); padding-bottom: calc(var(--safe-bottom) + 16px); }
+  .screen.active { opacity: 1; pointer-events: all; }
+
+  /* CLOCK SCREEN */
+  #screen-clock { align-items: center; justify-content: space-between; padding-left: 24px; padding-right: 24px; }
+  .clock-time { font-size: 80px; font-weight: 200; letter-spacing: -2px; color: var(--text); line-height: 1; margin-top: auto; }
+  .clock-date { font-size: 15px; color: var(--text2); margin-top: 4px; margin-bottom: 40px; }
+  .alarm-card { width: 100%; background: var(--bg2); border: 0.5px solid var(--border); border-radius: 20px; padding: 20px; margin-bottom: 16px; }
+  .alarm-row { display: flex; align-items: center; justify-content: space-between; margin-bottom: 16px; }
+  .alarm-label { font-size: 13px; color: var(--text2); text-transform: uppercase; letter-spacing: 0.06em; }
+  .toggle { width: 48px; height: 28px; background: var(--bg3); border-radius: 14px; border: none; cursor: pointer; position: relative; transition: background 0.2s; }
+  .toggle.on { background: var(--accent); }
+  .toggle::after { content: ''; position: absolute; left: 3px; top: 3px; width: 22px; height: 22px; border-radius: 11px; background: #fff; transition: transform 0.2s; }
+  .toggle.on::after { transform: translateX(20px); }
+  .time-picker { font-size: 44px; font-weight: 300; color: var(--text); letter-spacing: -1px; background: none; border: none; width: 100%; -webkit-appearance: none; cursor: pointer; }
+  .time-picker::-webkit-calendar-picker-indicator { filter: invert(0.5); }
+  .challenge-row { display: flex; gap: 8px; margin-bottom: 0; flex-wrap: wrap; }
+  .chip { padding: 6px 12px; border-radius: 20px; border: 0.5px solid var(--border2); background: var(--bg3); color: var(--text2); font-size: 13px; cursor: pointer; transition: all 0.15s; white-space: nowrap; }
+  .chip.active { background: var(--accent-dim2); border-color: var(--accent); color: #a29bfe; }
+  .object-row { margin-top: 14px; display: none; }
+  .object-row.show { display: block; }
+  .object-label { font-size: 12px; color: var(--text2); margin-bottom: 6px; }
+  .object-input { width: 100%; background: var(--bg3); border: 0.5px solid var(--border2); border-radius: 10px; padding: 10px 14px; color: var(--text); font-size: 15px; -webkit-appearance: none; }
+  .object-input::placeholder { color: var(--text3); }
+  .status-pill { display: flex; align-items: center; gap: 8px; padding: 10px 14px; border-radius: 12px; font-size: 13px; margin-bottom: 16px; }
+  .status-pill.armed { background: var(--green-dim); color: var(--green); }
+  .status-pill.off { background: var(--bg2); color: var(--text3); border: 0.5px solid var(--border); }
+  .dot { width: 6px; height: 6px; border-radius: 3px; background: currentColor; }
+  .dot.pulse { animation: pulse 2s infinite; }
+  @keyframes pulse { 0%,100%{ opacity:1; } 50%{ opacity:0.3; } }
+  .hint { font-size: 12px; color: var(--text3); text-align: center; padding: 0 32px; margin-bottom: auto; }
+
+  /* ALARM SCREEN */
+  #screen-alarm { background: var(--bg); align-items: center; justify-content: center; padding: 32px 24px; text-align: center; }
+  .alarm-big-time { font-size: 72px; font-weight: 200; color: var(--text); letter-spacing: -2px; margin-bottom: 4px; }
+  .alarm-big-label { font-size: 14px; color: var(--text2); margin-bottom: 48px; }
+  .challenge-area { width: 100%; background: var(--bg2); border: 0.5px solid var(--border); border-radius: 20px; padding: 24px; margin-bottom: 20px; }
+  .challenge-heading { font-size: 12px; color: var(--text3); text-transform: uppercase; letter-spacing: 0.08em; margin-bottom: 16px; }
+  .camera-btn { width: 80px; height: 80px; border-radius: 40px; background: var(--accent); border: none; cursor: pointer; display: flex; align-items: center; justify-content: center; margin: 0 auto 16px; transition: transform 0.1s; }
+  .camera-btn:active { transform: scale(0.93); }
+  .camera-icon { width: 32px; height: 32px; fill: none; stroke: #fff; stroke-width: 1.5; stroke-linecap: round; stroke-linejoin: round; }
+  .photo-preview { width: 100%; border-radius: 12px; max-height: 200px; object-fit: cover; display: none; margin-bottom: 12px; }
+  .photo-preview.show { display: block; }
+  .ai-status { font-size: 14px; color: var(--text2); min-height: 40px; display: flex; align-items: center; justify-content: center; gap: 8px; }
+  .spinner { width: 16px; height: 16px; border: 2px solid var(--border2); border-top-color: var(--accent); border-radius: 50%; animation: spin 0.7s linear infinite; flex-shrink: 0; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  .dismiss-btn { width: 100%; padding: 16px; background: var(--green); border: none; border-radius: 14px; color: #fff; font-size: 17px; font-weight: 500; cursor: pointer; display: none; transition: opacity 0.15s; }
+  .dismiss-btn.show { display: block; }
+  .dismiss-btn:active { opacity: 0.85; }
+  .retry-btn { background: none; border: 0.5px solid var(--border2); border-radius: 10px; padding: 8px 16px; color: var(--text2); font-size: 13px; cursor: pointer; margin-top: 10px; display: none; }
+  .retry-btn.show { display: block; margin: 10px auto 0; }
+
+  input[type="time"] { color-scheme: dark; }
+  input[type="text"]:focus, input[type="time"]:focus { outline: none; border-color: var(--accent); }
+  input[type="time"]::-webkit-datetime-edit { padding: 0; }
+</style>
+</head>
+<body>
+
+<!-- CLOCK / SETUP SCREEN -->
+<div class="screen active" id="screen-clock">
+  <div class="clock-time" id="clock">00:00</div>
+  <div class="clock-date" id="date-label">cargando...</div>
+
+  <div class="alarm-card">
+    <div class="alarm-row">
+      <span class="alarm-label">Alarma</span>
+      <button class="toggle" id="toggle-btn" onclick="toggleAlarm()" aria-label="Activar alarma"></button>
+    </div>
+    <input type="time" class="time-picker" id="alarm-time" value="07:00">
+    <div style="height:16px"></div>
+    <div style="font-size:12px; color:var(--text2); margin-bottom:8px; text-transform:uppercase; letter-spacing:0.06em;">Desafío para apagar</div>
+    <div class="challenge-row">
+      <button class="chip active" data-c="photo" onclick="selectChallenge(this)">📸 Foto al baño</button>
+      <button class="chip" data-c="math" onclick="selectChallenge(this)">🧮 Cálculo</button>
+      <button class="chip" data-c="breathe" onclick="selectChallenge(this)">🌬 Respiración</button>
+      <button class="chip" data-c="tap" onclick="selectChallenge(this)">👆 Tocar 20x</button>
+    </div>
+    <div class="object-row show" id="object-row">
+      <div class="object-label">¿Qué objeto fotografiar?</div>
+      <input type="text" class="object-input" id="object-name" placeholder="ej: espejo, jabón, ducha, toalla..." value="espejo del baño">
+    </div>
+  </div>
+
+  <div class="status-pill off" id="status-pill">
+    <div class="dot"></div>
+    Sin alarma activa
+  </div>
+
+  <p class="hint">Para que funcione como app, guarda esta página en tu pantalla de inicio desde Safari → compartir → "Añadir a pantalla de inicio"</p>
+</div>
+
+<!-- ALARM FIRING SCREEN -->
+<div class="screen" id="screen-alarm">
+  <div class="alarm-big-time" id="alarm-big-time">07:00</div>
+  <div class="alarm-big-label">¡Hora de levantarse!</div>
+
+  <div class="challenge-area" id="challenge-area">
+    <div class="challenge-heading" id="challenge-heading">Ve al baño y fotografía el objeto</div>
+    <div id="challenge-content"></div>
+  </div>
+
+  <div class="ai-status" id="ai-status"></div>
+  <button class="retry-btn" id="retry-btn" onclick="retryPhoto()">Tomar otra foto</button>
+  <button class="dismiss-btn" id="dismiss-btn" onclick="dismissAlarm()">✓ ¡Apagar alarma!</button>
+</div>
+
+<input type="file" id="camera-input" accept="image/*" capture="environment" style="display:none">
+
+<audio id="alarm-audio" loop>
+  <source src="data:audio/wav;base64,UklGRnoGAABXQVZFZm10IBAAAA..." type="audio/wav">
+</audio>
+
+<script>
+const DAYS = ['Domingo','Lunes','Martes','Miércoles','Jueves','Viernes','Sábado'];
+const MONTHS = ['enero','febrero','marzo','abril','mayo','junio','julio','agosto','septiembre','octubre','noviembre','diciembre'];
+
+let alarmOn = false;
+let alarmFired = false;
+let selectedChallenge = 'photo';
+let alarmCheckInterval = null;
+let clockInterval = null;
+let tapCount = 0;
+let breatheTimer = null;
+let breatheSecs = 0;
+let mathAnswer = null;
+let audioCtx = null;
+let alarmNodes = [];
+
+function pad(n){ return String(n).padStart(2,'0'); }
+
+function updateClock(){
+  const now = new Date();
+  document.getElementById('clock').textContent = pad(now.getHours())+':'+pad(now.getMinutes());
+  document.getElementById('date-label').textContent = DAYS[now.getDay()]+', '+now.getDate()+' de '+MONTHS[now.getMonth()];
+  if(alarmOn && !alarmFired){
+    const target = document.getElementById('alarm-time').value;
+    const current = pad(now.getHours())+':'+pad(now.getMinutes());
+    if(current === target && now.getSeconds() < 5){
+      fireAlarm();
+    }
+  }
+}
+
+function selectChallenge(btn){
+  document.querySelectorAll('.chip').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+  selectedChallenge = btn.dataset.c;
+  document.getElementById('object-row').classList.toggle('show', selectedChallenge === 'photo');
+}
+
+function toggleAlarm(){
+  alarmOn = !alarmOn;
+  alarmFired = false;
+  document.getElementById('toggle-btn').classList.toggle('on', alarmOn);
+  const pill = document.getElementById('status-pill');
+  const alarmTime = document.getElementById('alarm-time').value;
+  if(alarmOn){
+    pill.className = 'status-pill armed';
+    pill.innerHTML = `<div class="dot pulse"></div> Alarma activa · ${alarmTime}`;
+    if('serviceWorker' in navigator) navigator.serviceWorker.register('./sw.js').catch(()=>{});
+  } else {
+    pill.className = 'status-pill off';
+    pill.innerHTML = `<div class="dot"></div> Sin alarma activa`;
+  }
+}
+
+function playAlarmSound(){
+  try {
+    audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+    function beepSequence(){
+      const freqs = [880, 1100, 880, 1100];
+      freqs.forEach((freq, i) => {
+        const o = audioCtx.createOscillator();
+        const g = audioCtx.createGain();
+        o.connect(g); g.connect(audioCtx.destination);
+        o.frequency.value = freq;
+        o.type = 'sine';
+        const t = audioCtx.currentTime + i * 0.35;
+        g.gain.setValueAtTime(0, t);
+        g.gain.linearRampToValueAtTime(0.4, t + 0.05);
+        g.gain.exponentialRampToValueAtTime(0.001, t + 0.3);
+        o.start(t); o.stop(t + 0.35);
+        alarmNodes.push(o);
+      });
+    }
+    beepSequence();
+    const repeatInterval = setInterval(beepSequence, 2000);
+    alarmNodes.push({ stop: () => clearInterval(repeatInterval) });
+  } catch(e){}
+}
+
+function stopAlarmSound(){
+  alarmNodes.forEach(n => { try { n.stop(); } catch(e){} });
+  alarmNodes = [];
+  if(audioCtx){ audioCtx.close().catch(()=>{}); audioCtx = null; }
+}
+
+function fireAlarm(){
+  if(alarmFired) return;
+  alarmFired = true;
+  tapCount = 0; breatheSecs = 0;
+  document.getElementById('alarm-big-time').textContent = document.getElementById('alarm-time').value;
+  showScreen('screen-alarm');
+  buildAlarmChallenge();
+  playAlarmSound();
+  if(navigator.vibrate) navigator.vibrate([500,200,500,200,500]);
+}
+
+function buildAlarmChallenge(){
+  const area = document.getElementById('challenge-content');
+  const heading = document.getElementById('challenge-heading');
+  const dismissBtn = document.getElementById('dismiss-btn');
+  const retryBtn = document.getElementById('retry-btn');
+  const aiStatus = document.getElementById('ai-status');
+  dismissBtn.classList.remove('show');
+  retryBtn.classList.remove('show');
+  aiStatus.innerHTML = '';
+
+  if(selectedChallenge === 'photo'){
+    const obj = document.getElementById('object-name').value.trim() || 'el espejo del baño';
+    heading.textContent = `Fotografía: ${obj}`;
+    area.innerHTML = `
+      <p style="font-size:14px; color:var(--text2); margin-bottom:20px; line-height:1.5;">
+        Ve al baño y toma una foto de <strong style="color:var(--text)">${obj}</strong>. La IA verificará que sea correcto.
+      </p>
+      <button class="camera-btn" onclick="openCamera()" aria-label="Abrir cámara">
+        <svg class="camera-icon" viewBox="0 0 24 24">
+          <path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/>
+          <circle cx="12" cy="13" r="4"/>
+        </svg>
+      </button>
+      <img id="photo-preview" class="photo-preview" alt="Vista previa">
+    `;
+  } else if(selectedChallenge === 'math'){
+    heading.textContent = 'Resuelve el cálculo';
+    const a = Math.floor(Math.random()*50)+10;
+    const b = Math.floor(Math.random()*20)+5;
+    const ops = [{s:'+',f:(x,y)=>x+y},{s:'×',f:(x,y)=>x*y},{s:'−',f:(x,y)=>x-y}];
+    const op = ops[Math.floor(Math.random()*ops.length)];
+    mathAnswer = op.f(a,b);
+    area.innerHTML = `
+      <div style="font-size:40px; font-weight:200; color:var(--text); margin-bottom:20px;">${a} ${op.s} ${b} = ?</div>
+      <input type="number" id="math-input" style="background:var(--bg3);border:0.5px solid var(--border2);border-radius:12px;padding:12px 16px;color:var(--text);font-size:24px;text-align:center;width:140px;-webkit-appearance:none;" placeholder="?">
+      <br>
+      <button onclick="checkMath()" style="margin-top:14px;background:var(--accent);border:none;border-radius:12px;padding:12px 28px;color:#fff;font-size:16px;font-weight:500;cursor:pointer;">Verificar</button>
+      <div id="math-error" style="font-size:13px;color:var(--red);margin-top:10px;min-height:18px;"></div>
+    `;
+  } else if(selectedChallenge === 'breathe'){
+    heading.textContent = 'Respira durante 20 segundos';
+    breatheSecs = 0;
+    area.innerHTML = `
+      <div id="breathe-ring" style="width:90px;height:90px;border-radius:45px;border:2px solid var(--accent);display:flex;align-items:center;justify-content:center;margin:0 auto 16px;font-size:14px;color:var(--accent);font-weight:500;animation:breathe 4s infinite ease-in-out;">inhala</div>
+      <div id="breathe-count" style="font-size:14px;color:var(--text2);">0 / 20s</div>
+      <style>@keyframes breathe{0%,100%{transform:scale(1);opacity:0.6}50%{transform:scale(1.3);opacity:1}}</style>
+    `;
+    breatheTimer = setInterval(()=>{
+      breatheSecs++;
+      const cnt = document.getElementById('breathe-count');
+      const ring = document.getElementById('breathe-ring');
+      if(cnt) cnt.textContent = breatheSecs + ' / 20s';
+      if(ring) ring.textContent = breatheSecs % 8 < 4 ? 'inhala' : 'exhala';
+      if(breatheSecs >= 20){
+        clearInterval(breatheTimer);
+        if(cnt) cnt.textContent = '✓ Completado';
+        dismissBtn.classList.add('show');
+      }
+    }, 1000);
+  } else if(selectedChallenge === 'tap'){
+    heading.textContent = 'Toca el botón 20 veces';
+    tapCount = 0;
+    const dots = Array(20).fill('<div style="width:12px;height:12px;border-radius:6px;background:var(--border2);transition:background 0.15s;" class="tap-dot"></div>').join('');
+    area.innerHTML = `
+      <button onclick="doTap()" style="width:90px;height:90px;border-radius:45px;background:var(--accent);border:none;color:#fff;font-size:15px;font-weight:500;cursor:pointer;margin-bottom:20px;transition:transform 0.1s;active:scale(0.9);">TAP</button>
+      <div style="display:flex;gap:6px;flex-wrap:wrap;justify-content:center;margin-bottom:8px" id="tap-dots">${dots}</div>
+      <div id="tap-count" style="font-size:14px;color:var(--text2);">0 / 20</div>
+    `;
+  }
+}
+
+function openCamera(){
+  document.getElementById('camera-input').click();
+}
+
+document.getElementById('camera-input').addEventListener('change', async function(){
+  const file = this.files[0];
+  if(!file) return;
+  const preview = document.getElementById('photo-preview');
+  if(preview){
+    preview.src = URL.createObjectURL(file);
+    preview.classList.add('show');
+  }
+  await analyzePhoto(file);
+  this.value = '';
+});
+
+async function analyzePhoto(file){
+  const aiStatus = document.getElementById('ai-status');
+  const dismissBtn = document.getElementById('dismiss-btn');
+  const retryBtn = document.getElementById('retry-btn');
+  const obj = document.getElementById('object-name').value.trim() || 'el espejo del baño';
+
+  aiStatus.innerHTML = '<div class="spinner"></div> Analizando con IA...';
+  dismissBtn.classList.remove('show');
+  retryBtn.classList.remove('show');
+
+  try {
+    const base64 = await fileToBase64(file);
+    const mediaType = file.type || 'image/jpeg';
+
+    const response = await fetch('https://api.anthropic.com/v1/messages', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        model: 'claude-sonnet-4-6',
+        max_tokens: 200,
+        messages: [{
+          role: 'user',
+          content: [
+            {
+              type: 'image',
+              source: { type: 'base64', media_type: mediaType, data: base64 }
+            },
+            {
+              type: 'text',
+              text: `Analiza esta imagen. El usuario debe fotografiar: "${obj}". ¿La imagen muestra ese objeto o algo muy relacionado/similar? Responde SOLO con un JSON: {"found": true/false, "reason": "explicación breve en español de máximo 12 palabras"}. Sin texto adicional.`
+            }
+          ]
+        }]
+      })
+    });
+
+    const data = await response.json();
+    const raw = data.content?.map(b => b.text || '').join('') || '';
+    const clean = raw.replace(/```json|```/g, '').trim();
+    const result = JSON.parse(clean);
+
+    if(result.found){
+      aiStatus.innerHTML = `<span style="color:var(--green)">✓ ${result.reason}</span>`;
+      dismissBtn.classList.add('show');
+      retryBtn.classList.remove('show');
+      stopAlarmSound();
+      if(navigator.vibrate) navigator.vibrate([100,50,100]);
+    } else {
+      aiStatus.innerHTML = `<span style="color:var(--red)">✗ ${result.reason}</span>`;
+      retryBtn.classList.add('show');
+      playAlarmSound();
+    }
+  } catch(e) {
+    aiStatus.innerHTML = `<span style="color:var(--red)">Error al analizar. Intenta de nuevo.</span>`;
+    retryBtn.classList.add('show');
+  }
+}
+
+function retryPhoto(){
+  document.getElementById('camera-input').click();
+}
+
+function fileToBase64(file){
+  return new Promise((res, rej) => {
+    const r = new FileReader();
+    r.onload = () => res(r.result.split(',')[1]);
+    r.onerror = () => rej(new Error('Error leyendo archivo'));
+    r.readAsDataURL(file);
+  });
+}
+
+function checkMath(){
+  const val = parseInt(document.getElementById('math-input')?.value || '');
+  const err = document.getElementById('math-error');
+  if(isNaN(val) || val !== mathAnswer){
+    if(err) err.textContent = 'Incorrecto, intenta de nuevo.';
+    if(navigator.vibrate) navigator.vibrate(300);
+  } else {
+    if(err) err.textContent = '';
+    stopAlarmSound();
+    document.getElementById('dismiss-btn').classList.add('show');
+  }
+}
+
+function doTap(){
+  tapCount++;
+  const dots = document.querySelectorAll('.tap-dot');
+  if(dots[tapCount-1]) dots[tapCount-1].style.background = 'var(--accent)';
+  const cnt = document.getElementById('tap-count');
+  if(cnt) cnt.textContent = tapCount + ' / 20';
+  if(tapCount >= 20){
+    stopAlarmSound();
+    document.getElementById('dismiss-btn').classList.add('show');
+  }
+}
+
+function dismissAlarm(){
+  clearInterval(breatheTimer);
+  stopAlarmSound();
+  alarmOn = false;
+  alarmFired = false;
+  document.getElementById('toggle-btn').classList.remove('on');
+  const pill = document.getElementById('status-pill');
+  pill.className = 'status-pill armed';
+  pill.style.background = 'var(--green-dim)';
+  pill.style.color = 'var(--green)';
+  pill.innerHTML = `<div class="dot"></div> ¡Bien hecho! Ya estás despierto`;
+  showScreen('screen-clock');
+  setTimeout(() => {
+    pill.className = 'status-pill off';
+    pill.style = '';
+    pill.innerHTML = `<div class="dot"></div> Sin alarma activa`;
+  }, 6000);
+}
+
+function showScreen(id){
+  document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
+  document.getElementById(id).classList.add('active');
+}
+
+clockInterval = setInterval(updateClock, 1000);
+updateClock();
+
+if('serviceWorker' in navigator){
+  window.addEventListener('load', () => {
+    navigator.serviceWorker.register('./sw.js').catch(() => {});
+  });
+}
+
+document.addEventListener('visibilitychange', () => {
+  if(document.hidden && alarmOn) {
+    setTimeout(() => { if(alarmOn && !alarmFired) updateClock(); }, 1000);
+  }
+});
+</script>
+</body>
+</html>
