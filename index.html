@@ -665,8 +665,24 @@ clockInterval = setInterval(updateClock, 1000);
 updateClock();
 
 if('serviceWorker' in navigator){
+  // Cuando se activa una versión nueva del Service Worker, recarga sola
+  // (excepto si la alarma está sonando, para no interrumpir el desafío).
+  let swRefreshing = false;
+  navigator.serviceWorker.addEventListener('controllerchange', () => {
+    if(swRefreshing || alarmFired) return;
+    swRefreshing = true;
+    window.location.reload();
+  });
   window.addEventListener('load', () => {
-    navigator.serviceWorker.register('./sw.js').catch(() => {});
+    navigator.serviceWorker.register('./sw.js')
+      .then(reg => reg.update())
+      .catch(() => {});
+  });
+  // Busca actualizaciones cada vez que vuelves a abrir la app
+  document.addEventListener('visibilitychange', () => {
+    if(!document.hidden){
+      navigator.serviceWorker.getRegistration().then(reg => { if(reg) reg.update(); }).catch(() => {});
+    }
   });
 }
 
