@@ -361,7 +361,11 @@ function buildAlarmTone(){
     for(let i = s; i < e && i < n; i++){
       const t = (i - s) / sr;
       const env = Math.min(1, t / 0.01) * Math.min(1, (len - t) / 0.05);
-      sample[i] = Math.sin(2 * Math.PI * freq * t) * env * 0.6;
+      // Fundamental + armónicos impares → timbre tipo chicharra, más penetrante y fuerte
+      const w = Math.sin(2 * Math.PI * freq * t) * 0.6
+              + Math.sin(2 * Math.PI * freq * 3 * t) * 0.3
+              + Math.sin(2 * Math.PI * freq * 5 * t) * 0.1;
+      sample[i] = w * env * 0.97;
     }
   };
   beep(0.00, 0.25, 880);
@@ -397,6 +401,7 @@ function playAlarmSound(){
   const a = document.getElementById('alarm-audio');
   if(!a) return;
   try {
+    a.volume = 1;
     a.currentTime = 0;
     const p = a.play();
     if(p && p.catch) p.catch(() => {});
