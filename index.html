@@ -177,6 +177,7 @@ let clockInterval = null;
 let mathAnswer = null;
 let audioCtx = null;
 let alarmNodes = [];
+let audioUnlocked = false;  // iOS solo deja sonar tras un toque del usuario
 let objects = [];          // [{ id, name, ref }]  ref = dataURL JPEG o null
 let currentObject = null;  // objeto elegido al azar al sonar la alarma
 let pendingRefId = null;   // id del objeto al que se le está asignando referencia
@@ -337,6 +338,7 @@ function toggleAlarm(){
   const pill = document.getElementById('status-pill');
   const alarmTime = document.getElementById('alarm-time').value;
   if(alarmOn){
+    unlockAudio();  // desbloquea el sonido aprovechando este toque del usuario
     pill.className = 'status-pill armed';
     pill.innerHTML = `<div class="dot pulse"></div> Alarma activa · ${alarmTime}`;
     if('serviceWorker' in navigator) navigator.serviceWorker.register('./sw.js').catch(()=>{});
@@ -347,9 +349,31 @@ function toggleAlarm(){
   saveConfig();
 }
 
+function ensureAudio(){
+  if(!audioCtx){
+    try { audioCtx = new (window.AudioContext || window.webkitAudioContext)(); } catch(e){ return; }
+  }
+  if(audioCtx.state === 'suspended'){ audioCtx.resume().catch(() => {}); }
+}
+
+// Se llama desde un toque del usuario para "desbloquear" el audio en iOS.
+function unlockAudio(){
+  ensureAudio();
+  if(!audioCtx || audioUnlocked) return;
+  try {
+    const buffer = audioCtx.createBuffer(1, 1, 22050);
+    const src = audioCtx.createBufferSource();
+    src.buffer = buffer;
+    src.connect(audioCtx.destination);
+    src.start(0);
+    audioUnlocked = true;
+  } catch(e){}
+}
+
 function playAlarmSound(){
   try {
-    audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+    ensureAudio();
+    if(!audioCtx) return;
     function beepSequence(){
       const freqs = [880, 1100, 880, 1100];
       freqs.forEach((freq, i) => {
@@ -375,7 +399,7 @@ function playAlarmSound(){
 function stopAlarmSound(){
   alarmNodes.forEach(n => { try { n.stop(); } catch(e){} });
   alarmNodes = [];
-  if(audioCtx){ audioCtx.close().catch(()=>{}); audioCtx = null; }
+  // No cerramos audioCtx a propósito: lo mantenemos desbloqueado para la próxima alarma.
 }
 
 function fireAlarm(){
@@ -660,6 +684,9 @@ document.getElementById('ref-input').addEventListener('change', async function()
     alert('No se pudo procesar la imagen. Intenta con otra.');
   }
 });
+
+// Respaldo: cualquier toque/clic desbloquea el audio para iOS
+['touchend','click'].forEach(ev => document.addEventListener(ev, unlockAudio, { passive: true }));
 
 clockInterval = setInterval(updateClock, 1000);
 updateClock();
